@@ -19,7 +19,8 @@ library(FactoMineR)
 
 ## McElreath chapter 2.6, exercises 2M(1-7), extra: 2H(1-4)
 
-2M1. Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
+### 2M1.
+Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
 (1) W,W,W
 (2) W,W,W,L
 (3) L,W,W,L,W,W,W
@@ -54,7 +55,8 @@ plot(p_grid, posterior, type = "b",
 
 ```
 
-2M2. Now assume a prior for p that is equal to zero when p < 0.5 and is a positive constant when p ≥ 0.5. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
+### 2M2.
+Now assume a prior for p that is equal to zero when p < 0.5 and is a positive constant when p ≥ 0.5. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
 ```{r}
 # (1) W,W,W
 p_grid <- seq(from = 0, to = 1, length.out = 20)
@@ -88,7 +90,8 @@ plot(p_grid, posterior, type = "b",
 ```
 
 
-2M3. Suppose there are two globes, one for Earth and one for Mars. The Earth globe is 70% covered in water. The Mars globe is 100% land. Further suppose that one of these globes—you don’t know which—was tossed in the air and produced a “land” observation. Assume that each globe was equally likely to be tossed. Show that the posterior probability that the globe was the Earth, conditional on seeing “land” (Pr(Earth|land)), is 0.23.
+### 2M3.
+Suppose there are two globes, one for Earth and one for Mars. The Earth globe is 70% covered in water. The Mars globe is 100% land. Further suppose that one of these globes—you don’t know which—was tossed in the air and produced a “land” observation. Assume that each globe was equally likely to be tossed. Show that the posterior probability that the globe was the Earth, conditional on seeing “land” (Pr(Earth|land)), is 0.23.
 
 Pr(land|Earth) = 1–0.7 = 0.3
 Pr(land|Mars)=1 
@@ -111,7 +114,8 @@ Pr(Earth) = Pr(Mars) = 0.5
 ```
 
 
-2M4. Suppose you have a deck with only three cards. Each card has two sides, and each side is either black or white. One card has two black sides. The second card has one black and one white side. The third card has two white sides. Now suppose all three cards are placed in a bag and shuffled. Someone reaches into the bag and pulls out a card and places it flat on a table. A black side is shown facing up, but you don’t know the color of the side facing down. Show that the probability that the other side is also black is 2/3. Use the counting method (Section 2 of the chapter) to approach this problem. This means counting up the ways that each card could produce the observed data (a black side facing up on the table).
+### 2M4.
+Suppose you have a deck with only three cards. Each card has two sides, and each side is either black or white. One card has two black sides. The second card has one black and one white side. The third card has two white sides. Now suppose all three cards are placed in a bag and shuffled. Someone reaches into the bag and pulls out a card and places it flat on a table. A black side is shown facing up, but you don’t know the color of the side facing down. Show that the probability that the other side is also black is 2/3. Use the counting method (Section 2 of the chapter) to approach this problem. This means counting up the ways that each card could produce the observed data (a black side facing up on the table).
 card1=bb
 card2=bw
 card3=ww
@@ -119,7 +123,8 @@ card3=ww
 It is impossible that the its card 3, as we know that black was shown. Given this, there are two options (card1 and chard2), that could produce a black side. card1+card2 have a total option pool of 3b and 1w, but as one black has been shown, we are left with 2b and 1w. Therefore the chance of the face down side to be also black is 2/3 (total three option left, of which two are back)
 
 
-2M5. Now suppose there are four cards: B/B, B/W, W/W, and another B/B. Again suppose a card is drawn from the bag and a black side appears face up. Again calculate the probability that the other side is black.
+### 2M5. 
+Now suppose there are four cards: B/B, B/W, W/W, and another B/B. Again suppose a card is drawn from the bag and a black side appears face up. Again calculate the probability that the other side is black.
 
 card1=bb
 card2=bw
@@ -129,7 +134,8 @@ card4=bb
 Again we can rule out card two as it only has white. The total pool is bb;bw;bb (5b;1w). One black has been seen and can be emiminated from the pool, and thus our probably of another black is 4/5 (as we have 4b:1w).
 
 
-2M6. Imagine that black ink is heavy,and so cards with black sides are heavier than cards with white sides. As a result, it’s less likely that a card with black sides is pulled from the bag. So again assume there are three cards: B/B, B/W, and W/W. After experimenting a number of times, you conclude that for every way to pull the B/B card from the bag, there are 2 ways to pull the B/W card and 3 ways to pull the W/W card. Again suppose that a card is pulled and a black side appears face up. Show that the probability the other side is black is now 0.5. Use the counting method, as before.
+### 2M6.
+Imagine that black ink is heavy,and so cards with black sides are heavier than cards with white sides. As a result, it’s less likely that a card with black sides is pulled from the bag. So again assume there are three cards: B/B, B/W, and W/W. After experimenting a number of times, you conclude that for every way to pull the B/B card from the bag, there are 2 ways to pull the B/W card and 3 ways to pull the W/W card. Again suppose that a card is pulled and a black side appears face up. Show that the probability the other side is black is now 0.5. Use the counting method, as before.
 ```{r}
 # this time I wrote the solution as code to better follow the steps 
 ways <- c(2, 1, 0) # WW = 0 as we have seen a black side and can thus eleminate it from the pool
@@ -140,7 +146,8 @@ p <- likelihood / sum(likelihood)
 
 ```
 
-2M7. Assume again the original card problem ,with as single card showing a black side faceup. Before looking at the other side, we draw another card from the bag and lay it face up on the table. The face that is shown on the new card is white. Show that the probability that the first card, the one showing a black side, has black on its other side is now 0.75. Use the counting method, if you can. Hint: Treat this like the sequence of globe tosses, counting all the ways to see each observation, for each possible first card.
+### 2M7. 
+Assume again the original card problem ,with as single card showing a black side faceup. Before looking at the other side, we draw another card from the bag and lay it face up on the table. The face that is shown on the new card is white. Show that the probability that the first card, the one showing a black side, has black on its other side is now 0.75. Use the counting method, if you can. Hint: Treat this like the sequence of globe tosses, counting all the ways to see each observation, for each possible first card.
 
 If the first card we pull is the BB then there are three ways to pull a white the secound time (WB;WW = 3W:1B). The same occures on the secound side of the BB. So there are 6 ways (3 + 3) for the fist card to be black. If we pull the BW card first, we only have one total option path and there are only 2 ways to pull a white the secound time (BB;WW = 2W;2B).
 
@@ -150,7 +157,8 @@ We can calculate the probability of the first card being BB by dividing the numb
 #0.75
 ```
 
-2H1. Suppose there are two species of panda bear. Both are equally common in the wild and live in the same places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species B births twins 20% of the time, otherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research.
+### 2H1. 
+Suppose there are two species of panda bear. Both are equally common in the wild and live in the same places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species B births twins 20% of the time, otherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research.
 Now suppose you are managing a captive panda breeding program. You have a new female panda of unknown species, and she has just given birth to twins. What is the probability that her next birth will also be twins?
 pr(twins|species A) = 0.1
 pr(twins|species B) = 0.2
@@ -178,7 +186,8 @@ pr_species_B
 ```
 
 
-2H2. Recall all the facts from the problem above. Now compute the probability that the panda we have is from species A, assuming we have observed only the first birth and that it was twins.
+### 2H2.
+Recall all the facts from the problem above. Now compute the probability that the panda we have is from species A, assuming we have observed only the first birth and that it was twins.
 
 Pr(speciesA | twins)
 This is just the probablity of the panda being speices A, given that we have twins 
@@ -191,7 +200,8 @@ pr_species_A
 
 ```
 
-2H3. Continuing on from the previous problem, suppose the same panda mother has a second birth and that it is not twins, but a singleton infant. Compute the posterior probability that this panda is species A.
+### 2H3.
+Continuing on from the previous problem, suppose the same panda mother has a second birth and that it is not twins, but a singleton infant. Compute the posterior probability that this panda is species A.
 
 Pr(speciesA | twins)
 This is  the probability of the panda being speices A, given that we have twins and then a singleton
@@ -203,9 +213,13 @@ pr_twins <- (0.1 * pr_species_A) + (0.2 * (1-pr_species_A))
 # pr(species A|twins) = (pr(species A|twins) * pr(species A)) / pr(twins)
 ((1-0.1)*pr_species_A) / pr_twins
 
-```
 
-2H4. A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types.
+```
+Something went wrong in my formula for calculating pr(species A). I think I need to re-arrange the formular to switch from pr(twin) to pr(singleton), (what i tried in the last line of code with the 1-0.1), but something is not fully correct. May rearranging the formula somewhere else would fix the issue, but I am unsure if I´m on the correct path. 
+
+
+### 2H4.
+A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types.
 So suppose now that a veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the informa- tion you have about the test:
 • The probability it correctly identifies a species A panda is 0.8.
 • The probability it correctly identifies a species B panda is 0.65.
