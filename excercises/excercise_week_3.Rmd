@@ -261,4 +261,4 @@ dens(sim)
 
 
 ```
-looks quite similar as before, but overall I think it should be a good approximation, as it is quite ce
+looks quite similar as before, but overall I think it should be a good approximation, as it is quite centered on 111
