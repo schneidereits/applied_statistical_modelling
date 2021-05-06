@@ -1,0 +1,90 @@
+---
+title: "Exercise week 2"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+```
+
+
+### 4E3
+Using the model definition above, write down the appropriate form of Bayes’ theorem that includes the proper likelihood and priors.
+
+```{}
+Pr(μ, σ|h) = product_i( Normal(hi|μ,σ)Normal(μ0,10)normal(σ|0,1)) /
+integral(integral(product_i(Normal(hi|μ, σ)Normal(μ|0,10)normal (σ|0,1)dμdσ)))
+```
+
+
+
+### 4M1
+For the model definition below, simulate observed y values from the prior (not the posterior).
+
+yi ∼ Normal(μ, σ)
+μ ∼ Normal(0, 10)
+σ ∼ Exponential(1)
+
+
+```{r}
+curve( dnorm(x, 0, 10))
+
+curve(dexp(x, 1))
+
+sample_mu <- rnorm( 1000 , 0 , 10 )
+sample_sigma <- rexp( 1000 , 1)
+prior_h <- rnorm( 1000 , sample_mu , sample_sigma )
+dens( prior_h )
+
+```
+
+### 4H2
+Select out all the rows in the Howell1 data with ages below 18 years of age. If you do it right, you should end up with a new data frame with 192 rows in it.
+(a) Fit a linear regression to these data, using quap. Present and interpret the estimates. For every 10 units of increase in weight, how much taller does the model predict a child gets?
+(b) Plot the raw data, with height on the vertical axis and weight on the horizontal axis. Super- impose the MAP regression line and 89% interval for the mean. Also superimpose the 89% interval for predicted heights.
+(c) What aspects of the model fit concern you? Describe the kinds of assumptions you would change, if any, to improve the model. You don’t have to write any new code. Just explain what the model appears to be doing a bad job of, and what you hypothesize would be a better model.
+
+```{r}
+data(Howell1)
+d <- Howell1
+
+rm(Howell1)
+detach(package:rethinking, unload = T)
+
+
+d %>%
+  pivot_longer(everything()) %>% 
+  mutate(name = factor(name, levels = c("height", "weight", "age", "male"))) %>% 
+  
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~ name, scales = "free", ncol = 1)
+
+d2 <- 
+  d %>%
+  filter(age < 18)
+
+
+b1 <- 
+  brm(data = d2, 
+      family = gaussian,
+      height ~ 1,
+      prior = c(prior(normal(178, 20), class = Intercept),
+                prior(uniform(0, 50), class = sigma)),
+      iter = 31000, warmup = 30000, chains = 4, cores = 4,
+      seed = 4)
+
+summary(b4.1)
+plot(b4.1)
+
+```
+
