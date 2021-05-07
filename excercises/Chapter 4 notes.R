@@ -7,7 +7,8 @@ library(rethinking)
 
 # data ----
 
-
+pos <- replicate( 1000 , sum( runif(16,-1,1) ) )
+plot(density(pos))
 
 data(Howell1)
 d <- Howell1
@@ -85,3 +86,6 @@ rbind(summary(b4.1_hc)$fixed,
 post <- posterior_samples(b4.1_hc)
 
 head(post)
+
+select(post, b_Intercept:sigma) %>% 
+  cov()

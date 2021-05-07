@@ -1,5 +1,5 @@
 ---
-title: "Exercise week 2"
+title: "Exercise week 4"
 author: "Shawn Schneidereit"
 date: "`r Sys.Date()`"
 output: html_document
@@ -14,6 +14,7 @@ library(viridis)
 library(ggeffects)
 library(FactoMineR)
 library(rethinking)
+library(brms)
 ```
 
 
@@ -49,10 +50,10 @@ dens( prior_h )
 
 ### 4H2
 Select out all the rows in the Howell1 data with ages below 18 years of age. If you do it right, you should end up with a new data frame with 192 rows in it.
-(a) Fit a linear regression to these data, using quap. Present and interpret the estimates. For every 10 units of increase in weight, how much taller does the model predict a child gets?
-(b) Plot the raw data, with height on the vertical axis and weight on the horizontal axis. Super- impose the MAP regression line and 89% interval for the mean. Also superimpose the 89% interval for predicted heights.
-(c) What aspects of the model fit concern you? Describe the kinds of assumptions you would change, if any, to improve the model. You don’t have to write any new code. Just explain what the model appears to be doing a bad job of, and what you hypothesize would be a better model.
+(a) Fit a linear regression to these data, using brm Present and interpret the estimates. For every 10 units of increase in weight, how much taller does the model predict a child gets?
 
+
+### A
 ```{r}
 data(Howell1)
 d <- Howell1
@@ -60,8 +61,11 @@ d <- Howell1
 rm(Howell1)
 detach(package:rethinking, unload = T)
 
+d2 <- 
+  d %>%
+  filter(age < 18)
 
-d %>%
+d2 %>%
   pivot_longer(everything()) %>% 
   mutate(name = factor(name, levels = c("height", "weight", "age", "male"))) %>% 
   
@@ -69,22 +73,109 @@ d %>%
   geom_histogram(bins = 10) +
   facet_wrap(~ name, scales = "free", ncol = 1)
 
-d2 <- 
-  d %>%
-  filter(age < 18)
-
+# here is some quick simulation of samples from my priors to validate some prior choices
+sample_mu <- rnorm( 1000 , 100 , 40 )
+sample_sigma <- runif( 1000 , 0 , 30 )
+prior_h <- rnorm( 1000 , sample_mu , sample_sigma )
+rethinking::dens( prior_h )
 
 b1 <- 
   brm(data = d2, 
       family = gaussian,
-      height ~ 1,
-      prior = c(prior(normal(178, 20), class = Intercept),
-                prior(uniform(0, 50), class = sigma)),
+      height ~ 1 + weight,
+      prior = c(prior(normal(100, 40), class = Intercept),
+                prior(uniform(0, 30), class = sigma)),
       iter = 31000, warmup = 30000, chains = 4, cores = 4,
       seed = 4)
 
-summary(b4.1)
-plot(b4.1)
+summary(b1)
+plot(b1)
+
+# A quick check of the posteror samples
+post <- posterior_samples(b1)
+head(post)
+
+post %>%
+  pivot_longer(-lp__) %>% 
+  group_by(name) %>%
+  summarise(mean = mean(value),
+            sd   = sd(value),
+            `2.5%`  = quantile(value, probs = .025),
+            `97.5%` = quantile(value, probs = .975)) %>%
+  mutate_if(is.numeric, round, digits = 2)
+
+rethinking::dens(post)
+
+
+```
+Our weight estimate is 2.72, meaning that if we increase the weight by 10 kg we would have a 27.2 cm increase in height. 
+
+### B 
+(b) Plot the raw data, with height on the vertical axis and weight on the horizontal axis. Super- impose the MAP regression line and 89% interval for the mean. Also superimpose the 89% interval for predicted heights.
+
+```{r}
+
+
+
+weight_seq <- 
+  tibble(weight = 4:45)
+
+mu <-
+  fitted(b1,
+         summary = F,
+         newdata = weight_seq) %>%
+  data.frame() %>%
+  # here we name the columns after the `weight` values from which they were computed
+  set_names(4:45) %>% 
+  mutate(iter = 1:n())
+
+
+mu <- 
+  mu %>%
+  pivot_longer(-iter,
+               names_to = "weight",
+               values_to = "height") %>% 
+  # we might reformat `weight` to numerals
+  mutate(weight = as.numeric(weight))
+
+head(mu)
+
+mu_summary <-
+  fitted(b1, newdata = weight_seq) %>%
+  data.frame() %>%
+  bind_cols(weight_seq)
+
+head(mu_summary)
+
+
+
+# prediction intervals
+
+pred_height <-
+  predict(b1,
+          newdata = weight_seq) %>%
+  data.frame() %>%
+  bind_cols(weight_seq)
+  
+d2 %>%
+  ggplot(aes(x = weight)) +
+  geom_ribbon(data = pred_height, 
+              aes(ymin = Q2.5, ymax = Q97.5),
+              fill = "grey83") +
+  geom_smooth(data = mu_summary,
+              aes(y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              stat = "identity",
+              fill = "grey70", color = "black", alpha = 1, size = 1/2) +
+  geom_point(aes(y = height),
+             color = "navyblue", shape = 1, size = 1.5, alpha = 2/3) +
+  coord_cartesian(xlim = range(d2$weight),
+                  ylim = range(d2$height)) +
+  theme(text = element_text(family = "Times"),
+        panel.grid = element_blank())
+
 
 ```
 
+(c) What aspects of the model fit concern you? Describe the kinds of assumptions you would change, if any, to improve the model. You don’t have to write any new code. Just explain what the model appears to be doing a bad job of, and what you hypothesize would be a better model.
+
+Some concerns of the model fit I have is that a the lower and particularly upper bounds of the weight distribution the model fit seems to be quite poor. Some assumptions that could be changed to improve overall fit and that the model represents the data better, would be to add a polynomial component to the regression. 
