@@ -1,0 +1,73 @@
+---
+title: "Exercise week 5"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+```
+
+
+### 5H4
+Here is an open practice problem to engage your imagination. In the divorce date, States in the southern United States have many of the highest divorce rates. Add the South indicator variable to the analysis. First, draw one or more DAGs that represent your ideas for how Southern American culture might influence any of the other three variables (D, M or A). Then list the testable implications of your DAGs, if there are any, and fit one or more models to evaluate the implications. What do you think the influence of “Southerness” is?
+```{r}
+# load data and copy
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+# standardize variables
+d$Divorce <- standardize( d$Divorce )
+d$Marriage <- standardize( d$Marriage )
+d$MedianAgeMarriage <- standardize( d$MedianAgeMarriage )
+```
+Here I have S influencing both marriage and divorce rate. 
+For marriage I expect stronger conservative and religious values to increase the rate marriage rates, as their are stronger stigmas towards absences before marriage as well as un-wed couples having children. For the divorce rates, I expect the south to be a proxy for poorer socioeconomic development and weaker institutions, which increase household stress and thus the chance of relationship breakdown. 
+
+```{r}
+library(dagitty)
+dag <- dagitty( "dag{ A -> D; A -> M; M -> D; S -> M; S -> D}" )
+coordinates(dag) <- list( x=c(A=0,D=1,M=2, S=2) , y=c(A=0,D=1,M=0, S=1) )
+drawdag( dag )
+
+# impliedConditionalIndependencies 1 where marriage has no influence on divorce 
+DMA_dag1 <- dagitty('dag{ D <- A -> M ; D <- S -> M}')
+impliedConditionalIndependencies( DMA_dag1 )
+
+# impliedConditionalIndependencies 1 where marriage has  influence on divorce 
+DMA_dag2 <- dagitty('dag{ D <- A -> M -> D; D <- S -> M}')
+impliedConditionalIndependencies( DMA_dag2 )
+
+
+# model
+
+d <- d %>% mutate(South = as.factor(South))
+str(d)
+
+b5H4 <- brm(data = d, 
+      family = gaussian,
+      Divorce ~ 1 + South + Marriage + MedianAgeMarriage,
+      prior = c(prior(normal(0, 0.2), class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed = 42)
+
+summary(b5H4)
+
+mcmc_plot(b5H4, pars = "^b_")
+
+```
+
+Based on the Model, I believe that southerness increases the rate of divorce, (although it is notable that there is a wide est.error and CI). While a reasonably strong predictor when compared to the marriage rate, which essentially has no influence, overall age at marriage still has the strongest influence on the divorce rate.  
+
+
