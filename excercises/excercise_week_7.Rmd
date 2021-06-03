@@ -111,11 +111,6 @@ Can you reconcile the WAIC results with the posterior distribution of the bed co
 From the comparison of the models WAIC we can infer that adding bed to the model provides more valuable information content, than predictive ability that is lossed through overfitting. When comparing the WAICs we can also see that overall the difference between two models is not huge though and there still considerable uncertainty. 
 
 ```{r}
-psamp <- posterior_samples(b8)[,1:3] %>% 
-  pivot_longer(cols = everything())
-ggplot(psamp) +
-  geom_density(mapping = aes(x = value, group = name, col = name))
-
 
 psamp <- posterior_samples(b8.1)[,1:3] %>% 
   pivot_longer(cols = everything())
@@ -124,4 +119,4 @@ ggplot(psamp) +
 ```
 
 
-Yes the WAIC results can be reconciled with the posterior distributions, as there is greater overlapp and thus uncertainly  
+Yes the WAIC results can partially reconciled with the posterior distributions. bed a seperates nicely but there overlap and thus uncertainly between b and C, limiting the overall value of including bed into the model

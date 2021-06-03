@@ -138,6 +138,7 @@ b_waic <- loo_compare(b5.1, b5.shs, b5.t1, b5.t2, b5.t3, criterion = "waic")
 
 print(b_waic, simplify = F)
 ```
+
 ```{r}
 b5.1 <- add_criterion(b5.1, criterion = "loo") 
 b5.shs <- add_criterion(b5.shs, criterion = "loo") 
