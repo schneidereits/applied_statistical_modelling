@@ -1,0 +1,190 @@
+---
+title: "Exercise week 6"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+```
+
+
+### 7H3
+Consider three fictional Polynesian islands. On each there is a Royal Ornithologist charged by the king with surveying the bird population. They have each found the following proportions of 5 important bird species:
+
+#### part one
+ Notice that each row sums to 1, all the birds. This problem has two parts. It is not computationally complicated. But it is conceptually tricky. First, compute the entropy of each island’s bird distribution. Interpret these entropy values. 
+
+```{r}
+# create df
+islands <- tibble(island = paste("Island", 1:3),
+       a = c(0.2, 0.8, 0.05),
+       b = c(0.2, 0.1, 0.15),
+       c = c(0.2, 0.05, 0.7),
+       d = c(0.2, 0.025, 0.05),
+       e = c(0.2, 0.025, 0.05)) %>%
+  pivot_longer(-island, names_to = "species", values_to = "proportion")
+
+(entropy <- islands %>%
+  group_by(island) %>%
+  summarize(entropy = -sum(proportion*log(proportion))))
+
+
+
+```
+Island 1 highest the highest level as entropy, as the probability of different bird species are the most equally distributed, meaning that the chance seeing any one species is not that surprising. on the flip side island has the lowest entropy, as the is a unbalanced distribution of probabilities, meaning that encountering any species that is not a would be far more surprising.
+
+#### Part two
+Second, use each island’s bird distribution to predict the other two. This means to compute the KL divergence of each island from the others, treating each island as if it were a statistical model of the other islands. You should end up with 6 different KL divergence values. Which island predicts the others best? Why?
+```{r}
+d_kl <- function(p, q) {
+  sum(p * log(p/q))
+}
+
+KL_divergence <- c(1:6)
+KL_divergence[1] <- d_kl(entropy$entropy[1], entropy$entropy[2])
+KL_divergence[2] <-d_kl(entropy$entropy[1], entropy$entropy[3])
+KL_divergence[3] <-d_kl(entropy$entropy[2], entropy$entropy[1])
+KL_divergence[4] <-d_kl(entropy$entropy[2], entropy$entropy[3])
+KL_divergence[5] <-d_kl(entropy$entropy[3], entropy$entropy[1])
+KL_divergence[6] <-d_kl(entropy$entropy[3], entropy$entropy[2])
+print(KL_divergence)
+```
+Based on this island two is the best to predict the bird diversity on the other island, as it has the lowest D_kl values. Yet I do not belive that in this current form of the formula, divergence values should be negative, indicating that I did something incorrect in...
+
+
+
+### Q2 
+Recall the divorce rate exercise from last week. Refit some of these models using brms, and compare them using the WAIC and PSIS-LOO estimates of ELPD. In particular, compare model m5.1 from the book with some of your models from last week including southernness as a predictor. Explain the model comparison results.
+
+```{r, echo=T, warning=FALSE, message=FALSE}
+data(WaffleDivorce, package = "rethinking")
+d <- WaffleDivorce
+
+d <-
+  d %>% 
+  mutate(d = rethinking::standardize(Divorce),
+         m = rethinking::standardize(Marriage),
+         a = rethinking::standardize(MedianAgeMarriage))
+
+b5.1 <- 
+  brm(data = d, 
+      family = gaussian,
+      d ~ 1 + a,
+      prior = c(prior(normal(0, 0.2), class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 42,
+      sample_prior = T)
+
+
+b5.shs <- brm(data = d, 
+      family = gaussian,
+      d ~ 1 + South + m + a,
+      prior = c(prior(normal(0, 0.2), class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed = 42)
+
+b5.t1 <-
+  brm(data = d, 
+      family = gaussian(link = "identity"),
+      d ~ 1 + a,
+      prior = c(prior(normal(0, 2.5), class = Intercept),
+                prior(normal(0, 2.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed = 42)
+
+b5.t2 <-
+  brm(data = d, 
+      family = gaussian(link = "identity"),
+      d ~ 0 + South,
+      prior = c(prior(normal(0, 2.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed = 42)
+
+b5.t3 <-
+  brm(data = d, 
+      family = gaussian(link = "identity"),
+      d ~ 0 + South + a,
+      prior = c(prior(normal(0, 2.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed = 42)
+
+```
+
+```{r}
+b5.1 <- add_criterion(b5.1, criterion = "waic") 
+b5.shs <- add_criterion(b5.shs, criterion = "waic") 
+b5.t1 <- add_criterion(b5.t1, criterion = "waic") 
+b5.t2 <- add_criterion(b5.t2, criterion = "waic") 
+b5.t3 <- add_criterion(b5.t3, criterion = "waic") 
+
+b_waic <- loo_compare(b5.1, b5.shs, b5.t1, b5.t2, b5.t3, criterion = "waic")
+
+print(b_waic, simplify = F)
+```
+```{r}
+b5.1 <- add_criterion(b5.1, criterion = "loo") 
+b5.shs <- add_criterion(b5.shs, criterion = "loo") 
+b5.t1 <- add_criterion(b5.t1, criterion = "loo") 
+b5.t2 <- add_criterion(b5.t2, criterion = "loo") 
+b5.t3 <- add_criterion(b5.t3, criterion = "loo") 
+
+b_loo <- loo_compare(b5.1, b5.shs, b5.t1, b5.t2, b5.t3, criterion = "loo")
+
+print(b_waic, simplify = F)
+print(b_loo, simplify = F)
+
+# plot waic
+library(rcartocolor)
+carto_pal(7, "BurgYl")
+
+b_waic[, 7:8] %>% 
+  data.frame() %>% 
+  rownames_to_column("model_name") %>% 
+  mutate(model_name = fct_reorder(model_name, waic, .desc = T)) %>% 
+  
+  ggplot(aes(x = waic, y = model_name, 
+             xmin = waic - se_waic, 
+             xmax = waic + se_waic)) +
+  geom_pointrange(color = carto_pal(7, "BurgYl")[7], 
+                  fill = carto_pal(7, "BurgYl")[5], shape = 21) +
+  labs(title = "My custom WAIC plot",
+       x = NULL, y = NULL) +
+  theme(axis.ticks.y = element_blank())
+
+# plot loo
+b_loo[, 7:8] %>% 
+  data.frame() %>% 
+  rownames_to_column("model_name") %>% 
+  mutate(model_name = fct_reorder(model_name, looic, .desc = T)) %>% 
+  
+  ggplot(aes(x = looic, y = model_name, 
+             xmin = looic - se_looic, 
+             xmax = looic + se_looic)) +
+  geom_pointrange(color = carto_pal(7, "BurgYl")[7], 
+                  fill = carto_pal(7, "BurgYl")[5], shape = 21) +
+  labs(title = "My custom looic plot",
+       x = NULL, y = NULL) +
+  theme(axis.ticks.y = element_blank())
+```
+
+In terms of general trends of model ranking, both WAIC and PSIS-LOO estimates of ELPD had complete correspondence with each other. According to McElreath this should not be a surprising result as WAIC and PSIS should perform very similarly in the context of ordinary linear models, and if there are large differences this would be an indication that one (or both) criteria are unreliable. Also estimates where very simular one thing to note is that for WAIC values a warning was given to use loo, as p_waic values where high. I assume that the tight correspondence between the two methods indicates that this message can be disregarded though?
+
+Breaking down the differences between the individual models we can see that in the the difference in elpd (epld_diff) is quite low between all models, except for b5.t2 (which only included south as a predictor, and thus was missing critical information for making good predictions). Model b5.t3 had the lowest elpd, despite not including as many variables as b5.1 and b5.shs, indicating that adding south as a predictor contributes valuable information content (to compair b5.1 does not include south), while adding marriage rate results in overfitting/fitting to noise (to compare b5.shs had south and marriage rate). Valuable to note is that epld only provides insights into predictive capabilities and not the causality of the variable included into the model. 
+
