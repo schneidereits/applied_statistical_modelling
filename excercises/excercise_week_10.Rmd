@@ -1,0 +1,80 @@
+---
+title: "Exercise week 10"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+```
+
+
+The data contained in library(MASS);data(eagles) are records of salmon pirating at- tempts by Bald Eagles in Washington State. See ?eagles for details. While one eagle feeds, some- times another will swoop in and try to steal the salmon from it. Call the feeding eagle the “victim” and the thief the “pirate.” Use the available data to build a binomial GLM of successful pirating attempts.
+
+```{r}
+library(MASS)
+data(eagles, package = "MASS")
+data <- eagles
+?eagles
+
+# Creating dummy variables
+data$pirate_L <- ifelse(data$P == "L", 1, 0)
+data$victim_L <- ifelse(data$V == "L", 1, 0)
+data$pirate_A <- ifelse(data$A == "A", 1, 0)
+str(data)
+
+data_index <- data
+data_index$pirate_L <- as.factor(data_index$pirate_L)
+data_index$victim_L <- as.factor(data_index$victim_L)
+data_index$pirate_A <- as.factor(data_index$pirate_A)
+
+```
+
+
+### Q11H2a
+
+Fit the model above to the eagles data, using both quap and ulam. Is the quadratic approximation okay?
+
+```{r}
+b11.h2 <- 
+  brm(data = data, 
+      family = binomial,
+      y | trials(n) ~ 1 + pirate_L + victim_L + pirate_A,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 11)
+
+plot(b11.h2)
+summary(b11.h2)
+
+# using index approach
+
+b11.h2_index <- 
+  brm(data = data_index, 
+      family = binomial,
+      y | trials(n) ~ 1 + pirate_L + victim_L + pirate_A,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 11)
+
+plot(b11.h2_index)
+summary(b11.h2_index)
+
+```
+
+
+### Q11H2b
+Then plot the posterior predictions. Compute and display both (1) the predicted probability of success and its 89% interval for each row (i) in the data, as well as (2) the predicted success count and its 89% interval. What different information does each type of posterior prediction provide?
+
+### Q11H2c
