@@ -3,6 +3,7 @@ title: "Exercise week 10"
 author: "Shawn Schneidereit"
 date: "`r Sys.Date()`"
 output: html_document
+
 ---
 
 
@@ -15,6 +16,7 @@ library(ggeffects)
 library(FactoMineR)
 library(rethinking)
 library(brms)
+
 ```
 
 
@@ -32,19 +34,14 @@ data$victim_L <- ifelse(data$V == "L", 1, 0)
 data$pirate_A <- ifelse(data$A == "A", 1, 0)
 str(data)
 
-data_index <- data
-data_index$pirate_L <- as.factor(data_index$pirate_L)
-data_index$victim_L <- as.factor(data_index$victim_L)
-data_index$pirate_A <- as.factor(data_index$pirate_A)
-
 ```
 
 
 ### Q11H2a
 
-Fit the model above to the eagles data, using both quap and ulam. Is the quadratic approximation okay?
+Fit the model above to the eagles data, using brms. Is the approximation okay?
 
-```{r}
+```{r, message=FALSE, warning=FALSE, results=FALSE}
 b11.h2 <- 
   brm(data = data, 
       family = binomial,
@@ -53,28 +50,67 @@ b11.h2 <-
                 prior(normal(0, 0.5), class = b)),
       iter = 2000, warmup = 1000, chains = 4, cores = 4,
       seed = 11)
-
+```
+```{r}
 plot(b11.h2)
 summary(b11.h2)
-
-# using index approach
-
-b11.h2_index <- 
-  brm(data = data_index, 
-      family = binomial,
-      y | trials(n) ~ 1 + pirate_L + victim_L + pirate_A,
-      prior = c(prior(normal(0, 1.5), class = Intercept),
-                prior(normal(0, 0.5), class = b)),
-      iter = 2000, warmup = 1000, chains = 4, cores = 4,
-      seed = 11)
-
-plot(b11.h2_index)
-summary(b11.h2_index)
+mcmc_plot(b11.h2, pars = "^b_")
 
 ```
+
+The approximation does look ok. Our chains look like fuzzy caterpillar, meaning that they explore the parameter space well, and Rhat values are all = to one, indicating model convergence.  
 
 
 ### Q11H2b
 Then plot the posterior predictions. Compute and display both (1) the predicted probability of success and its 89% interval for each row (i) in the data, as well as (2) the predicted success count and its 89% interval. What different information does each type of posterior prediction provide?
 
+```{r}
+
+# determine the range of `a` values we'd like to feed into `fitted()`
+nd <- 
+  data %>% 
+  distinct(y, n, pirate_L, victim_L, pirate_A)
+
+# predictions of the responses
+predict(b11.h2)
+# predictions of the regression line
+fitted(b11.h2)
+
+
+ (post_predict <- fitted(b11.h2,
+         newdata = nd) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+     mutate(row = row_number(),
+            predicted_prob = (Estimate / n)))
+
+   #  pivot_longer(pirate_L:pirate_A) %>% 
+     #rename(variable = name) %>% 
+  #mutate(condition = factor(condition)) %>% 
+  
+  ggplot(data = post_predict, aes(x = row, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_hline(yintercept = .5) +
+  geom_line(aes(group = row),
+            size = 1/4) +
+  geom_pointrange(aes(color = row),
+                  fatten = 2.5, show.legend = F) + 
+  labs(subtitle = "posterior predictions")
+
+
+posterior_samples(b11.h2) %>% 
+  pivot_longer(b_b_treatment1:b_b_treatment4) %>% 
+  mutate(treatment = str_remove(name, "b_b_treatment"),
+         mean      = inv_logit_scaled(b_a_Intercept + value)) %>%
+  group_by(treatment) %>% 
+  mean_qi(mean)
+
+```
+
+
 ### Q11H2c
+Now try to improve the model. Consider an interaction between the pirate’s size and age (immature or adult). Compare this model to the previous one, using WAIC. Interpret.
+
+```{r}
+
+```
+
