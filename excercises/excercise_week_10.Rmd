@@ -97,20 +97,21 @@ fitted(b11.h2)
   labs(subtitle = "posterior predictions")
 
 
-posterior_samples(b11.h2) %>% 
-  pivot_longer(b_b_treatment1:b_b_treatment4) %>% 
-  mutate(treatment = str_remove(name, "b_b_treatment"),
-         mean      = inv_logit_scaled(b_a_Intercept + value)) %>%
-  group_by(treatment) %>% 
-  mean_qi(mean)
-
 ```
+
+_Similarly to as what Christen posted in her moodel post, I am unsure how to calculate the 89% CI intervals for aggregated proportion, without running a new model?_
+
+What different information does each type of posterior prediction provide
+
+Conceptually though the posterior prediction from the count column provides a relative assessment of success, were as the proportion column is in absolute terms
+
+
 
 
 ### Q11H2c
 Now try to improve the model. Consider an interaction between the pirate’s size and age (immature or adult). Compare this model to the previous one, using WAIC. Interpret.
 
-### This question is wrong, as there is only one age variable in the dataset. instead I used the age of the pirate in interaction with priate *and* victum body size to get a more comprehensive compairison. 
+### This question is wrong, as there is only one age variable in the dataset. Instead I used the age of the pirate in interaction with priate *and* victum body size to get a more comprehensive compairison. 
 
 ```{r, message=FALSE, warning=FALSE, results=FALSE}
 
