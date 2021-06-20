@@ -110,7 +110,75 @@ posterior_samples(b11.h2) %>%
 ### Q11H2c
 Now try to improve the model. Consider an interaction between the pirate’s size and age (immature or adult). Compare this model to the previous one, using WAIC. Interpret.
 
-```{r}
+### This question is wrong, as there is only one age variable in the dataset. instead I used the age of the pirate in interaction with priate *and* victum body size to get a more comprehensive compairison. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+
+b11.h2c.p <- 
+  brm(data = data, 
+      family = binomial,
+      y | trials(n) ~ 1 + pirate_L + victim_L + pirate_A + pirate_L:pirate_A,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 11)
+
+
+b11.h2c.v <- 
+  brm(data = data, 
+      family = binomial,
+      y | trials(n) ~ 1 + pirate_L + victim_L + pirate_A + pirate_L:victim_L,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 11)
 
 ```
 
+```{r}
+plot(b11.h2c.p)
+summary(b11.h2c.p)
+mcmc_plot(b11.h2c.p, pars = "^b_")
+
+plot(b11.h2c.v)
+summary(b11.h2c.v)
+mcmc_plot(b11.h2c.v, pars = "^b_")
+
+```
+
+```{r}
+b11.h2 <- add_criterion(b11.h2, criterion = "waic") 
+b11.h2c.p <- add_criterion(b11.h2c.p, criterion = "waic") 
+b11.h2c.v <- add_criterion(b11.h2c.v, criterion = "waic") 
+
+b_waic <- loo_compare(b11.h2, b11.h2c.p, b11.h2c.v, criterion = "waic")
+
+print(b_waic, simplify = F)
+```
+I received warning messages that p_waic exceed the recommended threshold, and thus attempted the same using loo
+
+```{r}
+b11.h2 <- add_criterion(b11.h2, criterion = "loo") 
+b11.h2c.p <- add_criterion(b11.h2c.p, criterion = "loo") 
+b11.h2c.v <- add_criterion(b11.h2c.v, criterion = "loo") 
+
+b_loo <- loo_compare(b11.h2, b11.h2c.p, b11.h2c.v, criterion = "loo")
+
+print(b_loo, simplify = F)
+```
+
+```{r}
+b_loo[, 7:8] %>% 
+  data.frame() %>% 
+  rownames_to_column("model_name") %>% 
+  
+  ggplot(aes(x = looic, y = model_name, 
+             xmin = looic - se_looic, 
+             xmax = looic + se_looic)) +
+  geom_pointrange() +
+  labs(title = "loo plot",
+       x = NULL, y = NULL) +
+  theme(axis.ticks.y = element_blank())
+```
+
+Overall the model including the interaction between victim size and pirate age performed best, according to the leave one out information criterion comparison. Including the victim size and pirate age also reduced the elpd SE. Notable is the modeling with the inclusion of the interaction between pirate size and age reduced slightly reduced model performance, when compared to the original. 
