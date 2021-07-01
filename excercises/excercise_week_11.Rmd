@@ -1,0 +1,204 @@
+---
+title: "Exercise week 11"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+library(patchwork)
+
+```
+
+# 12H1 
+In 2014, a paper was published that was entitled “Female hurricanes are deadlier than male hurricanes As the title suggests,the paper claimed that hurricanes with female names have caused greater loss of life, and the explanation given is that people unconsciously rate female hurricanes as less dangerous and so are less likely to evacuate. Statisticians severely criticized the paper after publication. Here, you’ll explore the complete data used in the paper and consider the hypothesis that hurricanes with female names are deadlier. Load the data with:
+```{r}
+library(rethinking)
+data(Hurricanes)
+?Hurricanes
+
+ggplot(Hurricanes, aes(femininity, deaths)) +
+  geom_point() +
+  geom_smooth(method = "lm") 
+# Just based off a cheap and dirty lm, there seems to be a slight potential of a trend...
+
+```
+Acquaint yourself with the columns by inspecting the help ?Hurricanes. In this problem, you’ll focus on predicting deaths using femininity of each hurricane’s name. Fit and interpret the simplest possible model, a Poisson model of deaths using femininity as a predictor. You can use quap or ulam. Compare the model to an intercept-only Poisson model of deaths. How strong is the association between femininity of name and deaths? Which storms does the model fit (retrodict) well? Which storms does it fit poorly?
+
+```{r}
+# some potential prior vis
+tibble(x       = c(0, 12),  # rough estimates from the data
+       y       = c(0, 250), # rough estimates from the data
+       meanlog = c(0, 3), 
+       sdlog   = c(10, 0.5)) %>% 
+  expand(nesting(x, y, meanlog, sdlog),
+         number = seq(from = 0, to = 100, length.out = 200)) %>% 
+  mutate(density = dlnorm(number, meanlog, sdlog),
+         group   = str_c("alpha ~ Normal(", meanlog, ", ", sdlog, ")")) %>% 
+  
+  ggplot(aes(fill = group, color = group)) +
+  geom_area(aes(x = number, y = density),
+            alpha = 3/4, size = 0, position = "identity") +
+  scale_y_continuous(NULL, breaks = NULL) +
+  xlab("mean number of deaths") +
+  theme(legend.position = "bottom")
+
+```
+A quick excercise to check the vailidity of the priors
+
+Now to running the Model
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+# intercept only
+b12.1 <-
+  brm(data = Hurricanes, 
+      family = poisson,
+      deaths ~ 1,
+      prior(normal(3, 0.5), class = Intercept),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 42) 
+
+# Including femininity 
+b12.1b <-
+  brm(data = Hurricanes, 
+      family = poisson,
+      deaths ~ femininity,
+      prior = c(prior(normal(3, 0.5), class = Intercept),
+                prior(normal(0, 0.2))),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 42) 
+```
+
+```{r}
+pp_check(b12.1)
+plot(b12.1)
+summary(b12.1)
+mcmc_plot(b12.1, pars = "^b_")
+
+pp_check(b12.1b)
+plot(b12.1b)
+summary(b12.1b)
+mcmc_plot(b12.1b, pars = "^b_")
+```
+
+```{r}
+b12.1 <- add_criterion(b12.1, criterion = "loo") 
+b12.1b <- add_criterion(b12.1b, criterion = "loo") 
+
+b_loo <- loo_compare(b12.1, b12.1b, criterion = "loo")
+
+print(b_loo, simplify = F)
+```
+
+
+```{r}
+# determine the range of `a` values we'd like to feed into `fitted()`
+nd <- 
+  Hurricanes %>% 
+  distinct(deaths, femininity)
+
+
+
+post_predict <- fitted(b12.1,
+         newdata = nd,
+         probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+     mutate(row = row_number())
+
+ post_predict_b<- fitted(b12.1b,
+         newdata = nd,
+         probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+     mutate(row = row_number())
+
+
+p1 <- post_predict %>%
+  ggplot(aes(x = femininity)) +
+  geom_smooth(aes(y = Estimate, ymin = Q5.5, ymax = Q94.5),
+              stat = "identity",
+              alpha = 1/4, size = 1/2) +
+  geom_point(data = bind_cols(Hurricanes, b12.1b$criteria$loo$diagnostics),
+             aes(y = deaths, size = pareto_k, color =as.factor(female)),
+             alpha = 4/5) 
+  
+p2 <- post_predict_b %>%
+  ggplot(aes(x = femininity)) +
+  geom_smooth(aes(y = Estimate, ymin = Q5.5, ymax = Q94.5),
+              stat = "identity",
+              alpha = 1/4, size = 1/2) +
+  geom_point(data = bind_cols(Hurricanes, b12.1b$criteria$loo$diagnostics),
+             aes(y = deaths, size = pareto_k, color =as.factor(female)),
+             alpha = 4/5) 
+
+(p1 | p2)
+```
+
+
+The association between femininity and deaths is not strongly influential, but seems to explain some of the trend at least (with a 95 CI that does not cross zero). Overall it fit more moderate storms better than more extreme one, where it completely fails to account for the variations of potential numbers in the total their death numbers totals.
+
+# 12H2
+
+Counts are nearly always over-dispersed relative to Poisson. So fit a gamma-Poisson (aka negative-binomial) model to predict deaths using femininity. Show that the over-dispersed model no longer shows as precise a positive association between femininity and deaths, with an 89% interval that overlaps zero. Can you explain why the association diminished in strength?
+
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+b12H2 <-
+  brm(data = Hurricanes, 
+      family = negbinomial,
+       deaths ~ femininity,
+      prior = c(prior(normal(3, 0.5), class = Intercept),  # beta_0
+                prior(exponential(1), class = shape)),  # alpha
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 42)
+```
+
+
+```{r}
+pp_check(b12H2)
+plot(b12H2)
+summary(b12H2) 
+mcmc_plot(b12H2, pars = "^b_")
+```
+
+```{r}
+b12H2 <- add_criterion(b12H2, criterion = "loo") 
+
+b_loo <- loo_compare(b12.1, b12.1b, b12H2, criterion = "loo")
+
+print(b_loo, simplify = F)
+```
+
+
+```{r}
+(post_predict_c<- fitted(b12H2,
+         newdata = nd,
+         probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+     mutate(row = row_number()))
+
+
+p3 <- post_predict_c %>%
+  ggplot(aes(x = femininity)) +
+  geom_smooth(aes(y = Estimate, ymin = Q5.5, ymax = Q94.5),
+              stat = "identity",
+              alpha = 1/4, size = 1/2) +
+  geom_point(data = bind_cols(Hurricanes, b12H2$criteria$loo$diagnostics),
+             aes(y = deaths, size = pareto_k, color =as.factor(female)),
+             alpha = 4/5) 
+
+(p2 | p3)
+```
+
+Now when comparing the poisson and the negative- binomial model we see that 89% interval that overlaps zero (but only marginally, it still seems like a trend to me?) The reason that femininity and deaths association diminished in strength is that in the pure Poisson model highly influential extreme points contribute more to defining the strength of the trend. In the new model, extreme storms are still influential, but now exert less influence on the observed trend. The gamma-Poisson model expects rate variation, and the estimated amount of variation is quite large, thus diminishing the associations strength.

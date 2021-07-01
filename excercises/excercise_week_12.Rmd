@@ -1,0 +1,115 @@
+---
+title: "Exercise week 12"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+library(patchwork)
+
+```
+
+#13E2.
+Rewrite the following model as a multilevel model.
+yi ∼ Binomial(1, pi)
+logit(pi) = αgroup[i] + βxi αgroup ∼ Normal(0, 1.5) β ∼ Normal(0, 0.5)
+
+
+```{r}
+```
+
+#13E3.
+Rewrite the following model as a multilevel model.
+yi ∼ Normal(μi, σ)
+μi = αgroup[i] + βxi αgroup ∼ Normal(0, 5) β ∼ Normal(0, 1)
+σ ∼ Exponential(1)
+
+
+#13M1. 
+Revisit the Reed frog survival data, data(reedfrogs), and add the predation and size treatment variables to the varying intercepts model. Consider models with either main effect alone, both main effects, as well as a model including both and their interaction. Instead of focusing on inferences about these two predictor variables, focus on the inferred variation across tanks. Explain why it changes as it does across models.
+
+```{r}
+data(reedfrogs, package = "rethinking")
+data <- reedfrogs
+data %>%
+  glimpse()
+data <- 
+  data %>%
+  mutate(tank = 1:nrow(data))
+```
+
+```{r}
+m_size <- 
+  brm(data = data, 
+      family = binomial,
+      surv | trials(density) ~ 1 + size + (1 | tank),
+      prior = c(prior(normal(0, 1.5), class = Intercept),  
+      prior(normal(0, 0.5), class = b)),
+      prior(exponential(1), class = sd),         
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      sample_prior = "yes",
+      seed = 25)
+m_pred <- 
+  brm(data = data, 
+      family = binomial,
+      surv | trials(density) ~ 1 + pred + (1 | tank),
+      prior = c(prior(normal(0, 1.5), class = Intercept),  
+      prior(normal(0, 0.5), class = b)),
+      prior(exponential(1), class = sd),         
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      sample_prior = "yes",
+      seed = 25)
+m_size_pred <- 
+  brm(data = data, 
+      family = binomial,
+      surv | trials(density) ~ 1 + size + pred + (1 | tank),
+      prior = c(prior(normal(0, 1.5), class = Intercept),  
+      prior(normal(0, 0.5), class = b),
+      prior(exponential(1), class = sd)),         
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      sample_prior = "yes",
+      seed = 25)
+m_inter <- 
+  brm(data = data, 
+      family = binomial,
+      surv | trials(density) ~ 1 + size * pred + (1 | tank),# addition + interaction 
+      prior = c(prior(normal(0, 1.5), class = Intercept),  
+      prior(normal(0, 0.5), class = b),
+      prior(exponential(1), class = sd)),         
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      sample_prior = "yes",
+      seed = 25)
+p_size <- mcmc_plot(m_size, pars = "^b_")
+p_pred <- mcmc_plot(m_pred, pars="^b_")
+p_size_pred <- mcmc_plot(m_size_pred, pars="^b_")
+p_inter <- mcmc_plot(m_inter, pars="^b_")
+(p_size | p_pred) 
+(p_size_pred | p_inter)
+```
+
+lorem ipsum
+
+#13M2. 
+Compare the models you fit just above, using WAIC. Can you reconcile the differences in WAIC with the posterior distributions of the models?
+
+```{r}
+# Adding criteria to the model and comparing it with the models of 12H1
+crit_size <- add_criterion(m_size, criterion = "waic") 
+crit_pred <- add_criterion(m_pred, criterion = "waic")
+crit_size_pred <- add_criterion(m_size_pred, criterion = "waic") 
+crit_inter <- add_criterion(m_inter, criterion = "waic") 
+comparison_loo <- loo_compare(crit_size, crit_pred, crit_size_pred, crit_inter, criterion = "waic")
+print(comparison_loo, simplify = FALSE)
+```
+
