@@ -1,0 +1,116 @@
+---
+title: "Exercise week 13"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+library(patchwork)
+
+```
+
+### 14E1
+
+Add to the following model varying slopes on the predictor x.
+yi ∼ Normal(μi, σ)
+
+μi = αgroup[i] + βxi
+
+αgroup ∼ Normal(α, σα)
+
+S = diagonal_sigma_matrix * R * diagonal_sigma_matrix #covariance matrix
+
+α ∼ Normal(0, 10)
+
+β ∼ Normal(0, 1) 
+
+σ ∼ Exponential(1)
+
+σα ∼ Exponential(1)
+
+*σβ ∼ Exponential(1)*  # prior for sd of slopes
+
+*R ∼ LKJcorr(2)*       # onion prior for corr matrix
+
+LKJcorr value = 1 -> flat
+
+LKJcorr value >1 -> regularize extreme corrs
+
+
+```{r}
+
+```
+
+### 14M1
+Repeat the café robo tsimulation from the beginning of the chapter.This time,set rho to zero, so that there is no correlation between intercepts and slopes. How does the posterior distribution of the correlation reflect this change in the underlying simulation?
+
+```{r}
+a       <-  3.5  # average morning wait time
+b       <- -1    # average difference afternoon wait time
+sigma_a <-  1    # std dev in intercepts
+sigma_b <-  0.5  # std dev in slopes
+rho     <- - 0   # NO! correlation between intercepts and slopes
+
+# the next three lines of code simply combine the terms, above
+mu     <- c(a, b)
+
+cov_ab <- sigma_a * sigma_b * rho
+sigma  <- matrix(c(sigma_a^2, cov_ab, 
+                   cov_ab, sigma_b^2), ncol = 2)
+
+matrix(1:4, nrow = 2, ncol = 2) # checking the data
+```
+
+
+```{r}
+sigmas <- c(sigma_a, sigma_b)          # standard deviations
+rho    <- matrix(c(1, rho,             # correlation matrix
+                   rho, 1), nrow = 2)
+
+# now matrix multiply to get covariance matrix
+sigma <- diag(sigmas) %*% rho %*% diag(sigmas)
+
+# how many cafes would you like?
+n_cafes <- 20
+
+set.seed(5)  # used to replicate example
+
+library(MASS)
+vary_effects <- 
+  MASS::mvrnorm(n_cafes, mu, sigma) %>% 
+  data.frame() %>% 
+  set_names("a_cafe", "b_cafe")
+
+head(vary_effects)
+
+```
+
+### original values with rhat 0.7
+   a_cafe     b_cafe
+1 4.223962 -1.6093565
+2 2.010498 -0.7517704
+3 4.565811 -1.9482646
+4 3.343635 -1.1926539
+5 1.700971 -0.5855618
+6 4.134373 -1.1444539
+
+### 14M2
+
+Fit this multilevel model to the simulated café data: Wi ∼ Normal(μi, σ)
+μi = αcafé[i] + βcafé[i]
+Ai αcafé ∼ Normal(α, σα  )
+βcafé ∼Normal(β,σβ)
+α ∼ Normal(0, 10)
+β ∼ Normal(0, 10) 
+σ, σα, σβ ∼ Exponential(1)

@@ -181,3 +181,32 @@ print(comparison_loo, simplify = FALSE)
 ```
 
 Yes, the differences in WAIC (and loo) can be reconciled with the in posterior distributions, as based on the compairison tables it can be seen that all three models that contain predation as a variable have relatively compairable elpd_loo values, where as the size model has a outlying low score.  
+
+
+```{r}
+
+# Size model
+ps_size <- posterior_samples(m_size)[,1:4] %>% 
+  pivot_longer(cols = everything())
+ggplot(ps_size) +
+  geom_density(mapping = aes(x = value, group = name, col = name))+
+  theme_bw()
+# Predation model
+ps_pred <- posterior_samples(m_pred)[,1:4] %>% 
+  pivot_longer(cols = everything())
+ggplot(ps_pred) +
+  geom_density(mapping = aes(x = value, group = name, col = name))+
+  theme_bw()
+# Additive model (size + predation)
+ps_additive <- posterior_samples(m_size_pred)[,1:5] %>% 
+  pivot_longer(cols = everything())
+ggplot(ps_additive) +
+  geom_density(mapping = aes(x = value, group = name, col = name))+
+  theme_bw()
+# Interaction model
+ps_inter <- posterior_samples(m_inter)[,1:6] %>% 
+  pivot_longer(cols = everything())
+ggplot(ps_inter) +
+  geom_density(mapping = aes(x = value, group = name, col = name))+
+  theme_bw()
+```
