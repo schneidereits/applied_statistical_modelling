@@ -55,6 +55,46 @@ LKJcorr value >1 -> regularize extreme corrs
 ### 14M1
 Repeat the café robo tsimulation from the beginning of the chapter.This time,set rho to zero, so that there is no correlation between intercepts and slopes. How does the posterior distribution of the correlation reflect this change in the underlying simulation?
 
+rho = 0.7
+
+```{r}
+a       <-  3.5  # average morning wait time
+b       <- -1    # average difference afternoon wait time
+sigma_a <-  1    # std dev in intercepts
+sigma_b <-  0.5  # std dev in slopes
+rho     <- - 0.7   #  correlation between intercepts and slopes
+
+# the next three lines of code simply combine the terms, above
+mu     <- c(a, b)
+
+cov_ab <- sigma_a * sigma_b * rho
+sigma  <- matrix(c(sigma_a^2, cov_ab, 
+                   cov_ab, sigma_b^2), ncol = 2)
+
+matrix(1:4, nrow = 2, ncol = 2) # checking the data
+
+sigmas <- c(sigma_a, sigma_b)          # standard deviations
+rho    <- matrix(c(1, rho,             # correlation matrix
+                   rho, 1), nrow = 2)
+
+# now matrix multiply to get covariance matrix
+sigma <- diag(sigmas) %*% rho %*% diag(sigmas)
+
+# how many cafes would you like?
+n_cafes <- 20
+
+set.seed(5)  # used to replicate example
+
+library(MASS)
+vary_effects_old <- 
+  MASS::mvrnorm(n_cafes, mu, sigma) %>% 
+  data.frame() %>% 
+  set_names("a_cafe", "b_cafe") %>% 
+  mutate(rho = "0.7")
+```
+
+
+rho = 0
 ```{r}
 a       <-  3.5  # average morning wait time
 b       <- -1    # average difference afternoon wait time
@@ -90,27 +130,137 @@ library(MASS)
 vary_effects <- 
   MASS::mvrnorm(n_cafes, mu, sigma) %>% 
   data.frame() %>% 
-  set_names("a_cafe", "b_cafe")
+  set_names("a_cafe", "b_cafe") %>% 
+  mutate(rho = "Zero")
 
-head(vary_effects)
+vary_effects_plot <- rbind(vary_effects_old, vary_effects)
+
+head(vary_effects_plot)
+
+vary_effects_plot %>% 
+  ggplot(aes(x = a_cafe, y = b_cafe, color =rho)) +
+  geom_point() + geom_rug() +
+  theme_classic() + geom_smooth( method  = "lm")
+
+```
+Here we see that rho = 0 is now much flatter and has a wider distibution of points than before when rho = 0.7
+
+
+# simulating data 
+
+```{r}
+n_visits <- 10
+sigma    <-  0.5  # std dev within cafes
+
+set.seed(22)  # used to replicate example
+
+d <-
+  vary_effects %>% 
+  mutate(cafe = 1:n_cafes) %>% 
+  expand(nesting(cafe, a_cafe, b_cafe), visit = 1:n_visits) %>% 
+  mutate(afternoon = rep(0:1, times = n() / 2)) %>% 
+  mutate(mu = a_cafe + b_cafe * afternoon) %>% 
+  mutate(wait = rnorm(n = n(), mean = mu, sd = sigma))
+
+glimpse(d)
+```
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+b14.M1 <- 
+  brm(data = d, 
+      family = gaussian,
+      wait ~ 1 + afternoon + (1 + afternoon | cafe), # addition of the            double || removes correlation and is equivilant to rho = 0 ?
+      prior = c(prior(normal(5, 2), class = Intercept),
+                prior(normal(-1, 0.5), class = b),
+                prior(exponential(1), class = sd),
+                prior(exponential(1), class = sigma),
+                prior(lkj(1), class = cor)), # lkj = 1 is the same as                                             # rho = zero (no correlation)
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      seed = 22)
+
 
 ```
 
-### original values with rhat 0.7
-   a_cafe     b_cafe
-1 4.223962 -1.6093565
-2 2.010498 -0.7517704
-3 4.565811 -1.9482646
-4 3.343635 -1.1926539
-5 1.700971 -0.5855618
-6 4.134373 -1.1444539
+```{r}
+pp_check(b14.M1)
+plot(b14.M1)
+summary(b14.M1)
+ mcmc_plot(b14.M1)
+
+ps_b14.M1 <- posterior_samples(b14.M1)[,1:8] %>% 
+  pivot_longer(cols = everything())
+ggplot(ps_b14.M1) +
+  geom_density(mapping = aes(x = value, group = name, col = name))+
+  theme_bw()
+```
+The  posterior distribution of the correlation coefficient is centered around zero with a large std.error, meaning that even if the prior was >1 (to account for correlation), the model can determine that no correlation exists. Overall there is no penalty to including the a flat correlation prior, but in the case of a correlation between intercepts and slopes, these would be detected
+
 
 ### 14M2
 
-Fit this multilevel model to the simulated café data: Wi ∼ Normal(μi, σ)
-μi = αcafé[i] + βcafé[i]
-Ai αcafé ∼ Normal(α, σα  )
+Fit this multilevel model to the simulated café data:
+
+Wi ∼ Normal(μi, σ)
+
+μi = αcafé[i] + βcafé[i]Ai
+
+αcafé ∼ Normal(α, σα  )
+
 βcafé ∼Normal(β,σβ)
+
 α ∼ Normal(0, 10)
+
 β ∼ Normal(0, 10) 
+
 σ, σα, σβ ∼ Exponential(1)
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+
+# from the chapter
+ b14.1 <- 
+  brm(data = d, 
+      family = gaussian,
+      wait ~ 1 + afternoon + (1 + afternoon | cafe),
+      prior = c(prior(normal(5, 2), class = Intercept),
+                prior(normal(-1, 0.5), class = b),
+                prior(exponential(1), class = sd),
+                prior(exponential(1), class = sigma),
+                prior(lkj(2), class = cor)),
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      seed = 22)
+
+b14.M2 <- 
+  brm(data = d, 
+      family = gaussian,
+      wait ~ 1 + afternoon + (1 + afternoon | cafe), 
+      prior = c(prior(normal(0,10), class = Intercept),
+                prior(normal(0,10), class = b),
+                prior(exponential(1), class = sigma)), 
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      seed = 22)
+
+```
+
+```{r}
+pp_check(b14.1)
+plot(b14.1)
+summary(b14.1)
+p1 <-  mcmc_plot(b14.1)
+ 
+ pp_check(b14.M2)
+plot(b14.M2)
+summary(b14.M2)
+p2 <-  mcmc_plot(b14.M2)
+
+(p1 |p2)
+```
+
+```{r}
+loo_b14.1 <- add_criterion(b14.1, criterion = "loo") 
+loo_b14.M2 <- add_criterion(b14.M2, criterion = "loo") 
+
+comparison_loo <- loo_compare(loo_b14.1, loo_b14.M2, criterion = "loo")
+print(comparison_loo, simplify = FALSE)
+```
+
+The two models are basically identical in terms of waic, implying that the omission of the multi dimentional corr prior has essentially no impact? 
