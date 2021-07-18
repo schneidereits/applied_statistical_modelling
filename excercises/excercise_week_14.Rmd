@@ -1,0 +1,143 @@
+---
+title: "Exercise week 14"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+library(patchwork)
+
+```
+
+### Data wrangel
+```{r}
+data(UCBadmit, package = "rethinking")
+d <- UCBadmit %>% 
+  mutate(gid = ifelse(applicant.gender == "male", "1", "2"))
+rm(UCBadmit)
+
+d
+```
+ 
+ 
+ # models 
+ 
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+
+b11.7 <-
+  brm(data = d, 
+      family = binomial,
+      admit | trials(applications) ~ 0 + gid,
+      prior(normal(0, 1.5), class = b),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 42) 
+
+b11.8 <-
+  brm(data = d, 
+      family = binomial,
+      bf(admit | trials(applications) ~ a + d,
+         a ~ 0 + gid, 
+         d ~ 0 + dept,
+         nl = TRUE),
+      prior = c(prior(normal(0, 1.5), nlpar = a),
+                prior(normal(0, 1.5), nlpar = d)),
+      iter = 4000, warmup = 1000, cores = 4, chains = 4,
+      seed = 42) 
+
+# Creating custom distribution for m12.1
+
+beta_binomial2 <- custom_family(
+  "beta_binomial2", dpars = c("mu", "phi"),
+  links = c("logit", "log"), lb = c(NA, 2),
+  type = "int", vars = "vint1[n]"
+)
+
+stan_funs <- "
+  real beta_binomial2_lpmf(int y, real mu, real phi, int T) {
+    return beta_binomial_lpmf(y | T, mu * phi, (1 - mu) * phi);
+  }
+  int beta_binomial2_rng(real mu, real phi, int T) {
+    return beta_binomial_rng(T, mu * phi, (1 - mu) * phi);
+  }"
+
+stanvars <- stanvar(scode = stan_funs, block = "functions")
+
+b12.1 <-
+  brm(data = d, 
+      family = beta_binomial2,  # the custom likelihood
+      admit | vint(applications) ~ 0 + gid,
+      prior = c(prior(normal(0, 1.5), class = b),
+                prior(exponential(1), class = phi)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      stanvars = stanvars,  # note our `stanvars`
+      seed = 42)
+
+
+b11.7_dept <- brm(data = d, 
+      family = binomial,
+      admit | trials(applications) ~ 0 + gid + (0 + gid | dept),
+      prior(normal(0, 1.5), class = b),
+      prior(exponential(1), class = sd, group = dept), 
+      prior(lkj(2), class = cor, group = dept),
+        
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 42) 
+
+```
+ 
+```{r}
+models <- list(b11.7, b11.8, b12.1, b11.7_dept)
+
+purrr::map(models, pp_check)
+purrr::map(models, plot)
+purrr::map(models, base::summary)
+purrr::map(models, mcmc_plot)
+```
+ 
+ 
+ 
+```{r}
+# Adding criteria to the model and comparing it with the models of 12H1
+waic_b11.7 <- add_criterion(b11.7, criterion = "waic") 
+waic_b11.8 <- add_criterion(b11.8, criterion = "waic")
+waic_b12.1 <- add_criterion(b12.1, criterion = "waic") 
+waic_b11.7_dept <- add_criterion(b11.7_dept, criterion = "waic") 
+
+comparison_waic <- loo_compare(waic_b11.7, waic_b11.8, waic_b12.1, waic_b11.7_dept, criterion = "waic")
+print(comparison_waic, simplify = FALSE)
+
+loo_b11.7 <- add_criterion(b11.7, criterion = "loo") 
+loo_b11.8 <- add_criterion(b11.8, criterion = "loo")
+
+expose_functions(b12.1, vectorize = TRUE)
+
+# "Unfortunately, using a custom distribution means that we can’t easily let STAN compute the ELPD for us, so we have to do it manually in R" 
+log_lik_beta_binomial2 <- function(i, draws) {
+  mu <- draws$dpars$mu[, i]
+  phi <- draws$dpars$phi
+  trials <- draws$data$vint1[i]
+  y <- draws$data$Y[i]
+  beta_binomial2_lpmf(y, mu, phi, trials)
+}
+
+loo_b12.1 <- loo(b12.1)
+
+loo_b12.1 <- add_criterion(b12.1, criterion = "loo") 
+loo_b11.7_dept <- add_criterion(b11.7_dept, criterion = "loo") 
+
+comparison_loo <- loo_compare(loo_b11.7, loo_size_b12.1, b12.1, loo_b11.7_dept, criterion = "loo")
+print(comparison_loo, simplify = FALSE)
+```
+ 
+ 
