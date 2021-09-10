@@ -1,0 +1,404 @@
+---
+title: "Exercise week 14"
+author: "Shawn Schneidereit"
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+
+```{r, include= FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(viridis)
+library(ggeffects)
+library(FactoMineR)
+library(rethinking)
+library(brms)
+library(patchwork)
+library(splines)
+
+
+```
+
+
+ Some of them are less exercise heavy, in which case you are required to write an extra discussion of the relevant chapters to re-balance the workload. These topics say “reflect upon”. In all the exercises, wherever you can, employ brms, prior and posterior predictive checks, counterfactual simulation, MCMC convergence diagnostics and model comparison via WAIC/PSIS. Please submit an R markdown file in html including (a) a brief motivation of the problem, (b) a brief explanation of each methodological step, (c) a brief interpretation of each relevant result and (d) – if this is part of the topic – a short discussion of the relevant chapters. Upload them via the upload link by 30 September 2021.
+
+
+## Topic 1 – polynomials & splines, cherry blossom data
+
+# HUGHLY IMPORTANT!!!!!
+###Rethinking: Linear, additive, funky. 
+The parabolic model of μi above is still a “linear model” of the mean, even though the equation is clearly not of a straight line. Unfortunately, the word “linear” means different things in different contexts, and different people use it differently in the same context. What “linear” means in this context is that μi is a linear function of any single parameter. Such models have the advantage of being easier to fit to data. They are also often easier to interpret, because they assume that parameters act independently on the mean. They have the disadvantage of being used thoughtlessly. When you have expert knowledge, it is often easy to do better than a linear model. These models are geocentric devices for describing partial correlations. We should feel embarrassed to use them, just so we don’t become satisfied with the phenomenological explanations they provide.
+
+###  Motivation of the problem
+
+Linear regressions provide flexible, easy to implement, and fairly robust methods to make predictions. Yet they come with a set of inherent limitations that motivate the use of alternative modeling approaches under certain scenarios. Polynomial regressions and splines transform a single predictor variable in multiple synethic variables. This offers some key advantages over traditional linear regression as variable non-linear fits can be achieved using a simple set of input data (a single variable, with no transformation).
+
+Polynomial regression can model curved relationships through including the powers of a predictor variable as additional synthetic variables. 
+
+B-splines subset the full range of a predictor varianle into individual parts, with each part getting assigned its own parameter. These parameters are then tuned (through turning them on/off), so that in summation they yield a curved regression
+- like a polynomial new synthetic variables are created, but divergently they are not used to directely transform the predictor (though taking the power of). The new synthetic variables (basis function) essentially function as slopes with w(i) weighting parameters determining the slop, by changing the mean of mu(i)
+- How to get basis variables? i)firest the full range of the data is divided into pivot points (knots). These could be even quantiles, but with data that does not have an equal coverage of data points across its range it makes sense to place irregular knots. ii) the knots act as pivot points for the basis function variables, and the synthetic (W?) variables smooth the slope when transitioning between knots. iii) when transitioning across the range the basis function is determined by two sythetic variables that are closest to it (relative its the points distance to each) NOTE: This means that synthetic parameters influence are only local, which is potentially an advantage over polynomail regression where paramerters alter the shape of the curve across the entire data range iv) to increase the wiggleness of a spline regression one can either use more knots, or use a higher degree polynomial instead of a linear approximation (this determines how and hw many basis functions combine and how the synthetic parameters interact to produce the spline)
+
+### Pro
+
+- (simple) linear models (especially with a limited set of predictors) tend to poorly predicted curves (especially at the tails of the data set). poly+splines provide simple methods to fit regressions through the central path of the data.
+- NL-regressions are very flexable and through taking a higher power it quickly becomes very easy to achieve high fits -> YET, Models can quickly stop making sense and lack extrapolation potential as i) better fit does not equal better model and ii) the lack epestolomogical value? (ie the computed relationship makes no mechanisitic sence and no causal insights can be decuded from it)
+
+### Cons
+
+- 
+
+- add anecodote from WEA leistungs kurven
+
+Read and reflect upon chapters 4.5 and 7.1.
+Do and write up exercises 4H5-8. (Note, there’s no 4H7, and 4H6 and 4H8 can only be done with ‘rethinking’.)
+
+### 4H5 
+Return to data(cherry_blossoms) and model the association between blossom date (doy) and March temperature (temp). Note that there are many missing values in both variables. You may consider a linear model, a polynomial, or a spline on temperature. How well does temperature trend predict the blossom trend?
+
+### Data Import
+```{r}
+data(cherry_blossoms, package = "rethinking")
+data <- cherry_blossoms %>% 
+  drop_na(doy, temp) %>%  # In order to limit down the line issues in brms, na enteres are removed
+  mutate(temp_s = (temp - mean(temp)) / sd(temp),
+         temp_2 = temp_s^2,
+         temp_3 = temp_s^3,
+         temp_4 = temp_s^5) %>% 
+  glimpse() 
+
+ggplot(data, aes(temp, doy)) + 
+  geom_point() +
+  geom_smooth(method = lm) +
+  theme_classic()
+
+```
+From a most basic linear regression between day of first bloom and temp, we can see that there seems to be a trend that blooming occurs earlier. Yet potentially we could model this relationship better, as particularly since ~1800 (industrialization) there seem to be a greater concentration of earlier blooming event. Using a more "wiggly" regression could help achieve this 
+
+When using splines, the first step is determine the number and distribution of knots. In accordance with the simple example from McElreath I started with a even spread of 5 knots
+```{r}
+num_knots <- 5
+(knot_list <- quantile(data$temp, probs = seq(from = 0, to = 1, length.out = num_knots)))
+
+# visualization of the knot locations
+data %>% 
+  ggplot(aes(x = temp, y = doy)) +
+  geom_vline(xintercept = knot_list, color = "black", alpha = 1/2) +
+  geom_point() +
+  theme_classic() 
+```
+
+The next step is to select the degree of the polynomial (B), to determine how basis functions combine. Here I use the convenient bs function from the spline package. Additionally I created two additional spline models to investigate the influence of the number of knots and polynomial degree. The first one has 15 knots with three degrees, while the second has 15 knots with 6 degrees.
+```{r}
+B_5 <- bs(data$temp,
+        knots = knot_list[-c(1, num_knots)], # the first and last temp knots are removed, as they are at the boundries of the data range
+        degree = 3, 
+        intercept = TRUE)
+
+# second scenario with more knots
+num_knots <- 15
+(knot_list <- quantile(data$temp, probs = seq(from = 0, to = 1, length.out = num_knots)))
+B_15 <- bs(data$temp,
+        knots = knot_list[-c(1, num_knots)], # the first and last temp knots are removed, as they are at the boundries of the data range
+        degree = 3, 
+        intercept = TRUE)
+
+# Third scenario with more knots and high degrees
+B_15d <- bs(data$temp,
+        knots = knot_list[-c(1, num_knots)], # the first and last temp knots are removed, as they are at the boundries of the data range
+        degree = 6, 
+        intercept = TRUE)
+
+
+```
+
+Here is some visualization of how the basis functions combine across time
+
+```{r}
+# wrangle a bit
+b <- B_15 %>% 
+  data.frame() %>% 
+  bind_cols(select(data, temp)) %>% 
+  pivot_longer(-temp,
+               names_to = "bias_function",
+               values_to = "bias")
+
+# plot
+b %>% 
+  ggplot(aes(x = temp, y = bias, group = bias_function)) +
+  geom_vline(xintercept = knot_list) +
+  geom_line() +
+  ylab("bias value") +
+  theme_bw() 
+
+# aggregated plot to show the individual bais functions 
+b %>% 
+  mutate(bias_function = as.factor(bias_function)) %>% 
+  mutate(bias_function = str_c("bias function ", bias_function)) %>% 
+  ggplot(aes(x = temp, y = bias)) +
+  geom_vline(xintercept = knot_list) +
+  geom_line() +
+  ylab("bias value") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(color = "transparent"),
+        strip.text = element_text(size = 8, margin = margin(0.1, 0, 0.1, 0, "cm"))) +
+  facet_wrap(~ bias_function, ncol = 1)
+```
+
+
+### Modelling 
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+# Prior to model construction the basis functions need to be added to the data
+data_b <-data %>% 
+  mutate(B_5 = B_5,
+         B_15 = B_15,
+         B_15d = B_15d) 
+
+b_linear <-
+  brm(data = data_b,
+      family = gaussian,
+      doy ~ 1 + temp_s,
+     prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_linear")
+
+b_squared <- 
+  brm(data = data_b, 
+      family = gaussian,
+      doy ~ 1 + temp_s + temp_2,
+      prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b, coef = "temp_s"),
+                prior(normal(0, 1), class = b, coef = "temp_2"),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_squared")
+
+b_cubed <- 
+  brm(data = data_b, 
+      family = gaussian,
+      doy ~ 1 + temp_s + temp_2 + temp_3,
+     prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b, coef = "temp_s"),
+                prior(normal(0, 1), class = b, coef = "temp_2"),
+                prior(normal(0, 1), class = b, coef = "temp_3"),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_cubed")
+
+b_fourth <- 
+  brm(data = data_b, 
+      family = gaussian,
+      doy ~ 1 + temp_s + temp_2 + temp_3 + temp_4,
+      prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b, coef = "temp_s"),
+                prior(normal(0, 1), class = b, coef = "temp_2"),
+                prior(normal(0, 1), class = b, coef = "temp_3"),
+                prior(normal(0, 1), class = b, coef = "temp_4"),
+               prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_fourth")
+
+# basic model with the priors matching the books
+b_spline_5 <- 
+  brm(data = data_b,
+      family = gaussian,
+      doy ~ 1 + B_5,
+      prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_spline_5")
+
+b_spline_15 <- 
+  brm(data = data_b,
+      family = gaussian,
+      doy ~ 1 + B_15,
+      prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_spline_15")
+
+b_spline_15d <- 
+  brm(data = data_b,
+      family = gaussian,
+      doy ~ 1 + B_15d,
+      prior = c(prior(normal(100, 10), class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 8000, warmup = 1000, chains = 4, cores = 4,
+      seed = 4,
+      file = "/Users/shawn/Documents/humbolt/semester_02/applied_statistical_modelling/fits/b_spline_15d")
+
+```
+
+
+```{r}
+models <- list(b_linear, 
+               b_squared,b_cubed, b_fourth,
+               b_spline_5, b_spline_15, b_spline_15d)
+
+purrr::map(models, pp_check)
+#purrr::map(models, plot)
+purrr::map(models, base::summary)
+purrr::map(models, mcmc_plot)
+```
+As commonly cited as a challenge of using spline regressions, each synthetic parameter gets B (basis function) its own parameter, making tabular interpretation challenging. Therefor I will primarly refer to the visual outputs for model interpritaion. 
+
+```{r}
+
+
+model_fit <- bind_rows(
+  add_fitted_draws(data_b, b_linear) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Linear"),
+  add_fitted_draws(data_b, b_squared) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Quadratic"),
+  add_fitted_draws(data_b, b_cubed) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Cubic"),
+  add_fitted_draws(data_b, b_fourth) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Fourth"))
+  
+  
+model_fit <- bind_rows(
+  add_fitted_draws(data_b, b_spline_5) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Spline 5 Knots; 3 degree polynomial"),
+  add_fitted_draws(data_b, b_spline_15) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Spline 15 Knots; 6 degree polynomial"),
+  add_fitted_draws(data_b, b_spline_15d) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Spline 15 Knots; 6 degree polynomial")
+) %>%
+  ungroup() %>%
+  mutate(model = factor(model, levels = c("Linear", "Quadratic", "Cubic",
+                                          "Fourth", "spline_5",
+                                          "spline_15", "spline_15d")))
+
+model_pred <- bind_rows(
+  add_predicted_draws(data_b, b_linear) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Linear"),
+  add_predicted_draws(data_b, b_squared) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Quadratic"),
+  add_predicted_draws(data_b, b_cubed) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Cubic"),
+  add_predicted_draws(data_b, b_fourth) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Fourth"),
+  add_predicted_draws(data_b, b_spline_5) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Spline 5 Knots; 3 degree polynomial"),
+  add_predicted_draws(data_b, b_spline_15) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Spline 15 Knots; 6 degree polynomial"),
+  add_predicted_draws(data_b, b_spline_15d) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Spline 15 Knots; 6 degree polynomial")
+) %>%
+  ungroup() %>%
+  mutate(model = factor(model, levels = c("Linear", "Quadratic", "Cubic",
+                                          "Fourth", "spline_5",
+                                          "spline_15", "spline_15d")))
+
+ggplot(data, aes(x = temp)) +
+  facet_wrap(~model, nrow = 2) +
+  geom_point(aes(y = doy), alpha = 0.2) +
+  geom_ribbon(data = model_pred, aes(ymin = .lower, ymax = .upper),
+              alpha = 0.2) +
+  geom_lineribbon(data = model_fit, aes(y = .value, ymin = .lower, ymax = .upper),
+                  size = .6) +
+  scale_fill_brewer(breaks = c(0.67, 0.89, 0.97)) +
+  labs(x = "Temperature", y = "DOY") +
+  theme_classic()
+```
+
+```{r}
+
+
+loo_b_linear <-    add_criterion(b_linear, criterion = "loo") 
+loo_b_squared <-   add_criterion(b_squared, criterion = "loo") 
+loo_b_cubed <-     add_criterion(b_cubed, criterion = "loo") 
+loo_b_fourth <-    add_criterion(b_fourth, criterion = "loo") 
+loo_b_spline_5 <-  add_criterion(b_spline_5, criterion = "loo") 
+loo_b_spline_15 <- add_criterion(b_spline_15, criterion = "loo") 
+loo_b_spline_15d <-add_criterion(b_spline_15d, criterion = "loo") 
+
+comparison_loo <- loo_compare(loo_b_linear, 
+                              loo_b_squared,loo_b_cubed,loo_b_fourth,
+                              loo_b_spline_5, loo_b_spline_15, 
+                              loo_b_spline_15d, 
+                              criterion = "loo")
+print(comparison_loo, simplify = FALSE)
+```
+
+
+Postitior samples
+```{r}
+# post <- posterior_samples(b_linear)
+# 
+# post %>% 
+#   select(b_B1:b_B7) %>% 
+#   # set_names(c(str_c(0, 1:9), 10:17)) %>%
+#   pivot_longer(everything(), names_to = "bias_function") %>% 
+#   group_by(bias_function) %>% 
+#   summarise(weight = mean(value)) %>% 
+#   full_join(b, by = "bias_function") %>% 
+#   
+#   # plot
+#   ggplot(aes(x = temp, y = bias * weight, group = bias_function)) +
+#   geom_vline(xintercept = knot_list, color = "white", alpha = 1/2) +
+#   geom_line(color = "#ffb7c5", alpha = 1/2, size = 1.5) +
+#   theme_bw() +
+#   theme(panel.background = element_rect(fill = "#4f455c"),
+#         panel.grid = element_blank()) 
+
+```
+
+```{r}
+# f <- fitted(b1)
+# 
+# f %>% 
+#   data.frame() %>% 
+#   bind_cols(data) %>% 
+#   
+#   ggplot(aes(x = temp, y = doy, ymin = Q2.5, ymax = Q97.5)) + 
+#   geom_vline(xintercept = knot_list) +
+#   geom_hline(yintercept = fixef(b1)[1, 1], linetype = 2) +
+#   geom_point() +
+#   geom_ribbon( alpha = 2/3) +
+#   labs(x = "temp",
+#        y = "day in temp") +
+#   theme_bw() 
+```
+
+
+### 4H6 
+Simulate the prior predictive distribution for the cherry blossom spline in the chapter. Adjust the prior on the weights and observe what happens. What do you think the prior on the weights is doing?
+
+```{r}
+
+```
+
+
+### 4H8 
+The cherry blossom spline in the chapter used an intercept α ,but technically it doesn’trequire one. The first basis functions could substitute for the intercept. Try refitting the cherry blossom spline without the intercept. What else about the model do you need to change to make this work?
+ 
